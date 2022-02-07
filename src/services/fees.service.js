@@ -1,5 +1,4 @@
 const Fee = require("../models/fees.model");
-const { getFeeConfiguration } = require("../helpers/fee.helpers");
 
 const saveFeeConfigurations = (req, res) => {
   const feeString = req.body?.FeeConfigurationSpec;
@@ -40,48 +39,41 @@ const saveFeeConfigurations = (req, res) => {
 };
 
 const feeComputation = async (req, res) => {
-  const {Customer, CurrencyCountry, PaymentEntity, Amount } = req.body;
+  const { Customer, CurrencyCountry, PaymentEntity, Amount } = req.body;
   if (Customer?.BearsFee) {
-    let defaultValue = "*".split('"');
-    console.log(defaultValue);
     const locale =
       CurrencyCountry && PaymentEntity.Country
         ? CurrencyCountry === PaymentEntity.Country
           ? "LOCL"
           : "INTL"
         : "*";
+    const entity = PaymentEntity.Type ? PaymentEntity.Type : "*";
     try {
       let response = await Fee.findOne(
         {
+          locale,
+          entity,
           $or: [
-            {
-              locale,
-              entity: PaymentEntity.Type,
-
-              entityProperty: {
-                $in: [
-                  PaymentEntity.ID,
-                  PaymentEntity.Brand,
-                  PaymentEntity.Number,
-                  PaymentEntity.Issuer,
-                  PaymentEntity.SixID,
-                ],
-              },
-            },
-            { locale, entity: PaymentEntity.Type, entityProperty: "*" },
+            { entityProperty: PaymentEntity.ID },
+            { entityProperty: PaymentEntity.Brand },
+            { entityProperty: PaymentEntity.Number },
+            { entityProperty: PaymentEntity.Issuer },
+            { entityProperty: PaymentEntity.SixID },
+            { entityProperty: "*" },
           ],
         },
+
         { id: 1, value: 1, type: 1 }
-      ).lean();
-      
-      console.log(response);
+      )
+        .lean()
+        .sort({ entityProperty: -1 });
+
       let data;
-      console.log(response.type);
-      switch (response[0].type) {
+      switch (response.type) {
         case "PERC":
           let percentage = response.value;
           let AppliedFeeValuePerc = Number((percentage * Number(Amount)) / 100);
-          let ChargeAmountPerc = Number(Amount) + Number(AppliedFeeValue);
+          let ChargeAmountPerc = Number(Amount) + Number(AppliedFeeValuePerc);
           data = {
             AppliedFeeID: response.id,
             AppliedFeeValue: AppliedFeeValuePerc,
@@ -101,25 +93,22 @@ const feeComputation = async (req, res) => {
             SettlementAmount: Amount,
           };
 
-          console.log(flatFee);
           return res.status(200).json(data);
         case "FLAT_PERC":
-          let flatPercFee = response[0].value;
+          let flatPercFee = response.value;
           let [flat, perc] = flatPercFee.split(":");
           let AppliedFeeValueFlatPerc =
             Number(flat) + (Number(Amount) * Number(perc)) / 100;
           let ChargeAmountFlatPerc =
             Number(AppliedFeeValueFlatPerc) + Number(Amount);
-          console.log(ChargeAmountFlatPerc);
           data = {
-            AppliedFeeID: response[0].id,
+            AppliedFeeID: response.id,
             AppliedFeeValue: AppliedFeeValueFlatPerc,
             ChargeAmount: ChargeAmountFlatPerc,
             SettlementAmount: Amount,
           };
 
-          console.log(data);
-        // return res.status(200).json(data);
+          return res.status(200).json(data);
       }
       return res.status(200).json(response);
     } catch (err) {
