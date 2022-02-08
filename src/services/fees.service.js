@@ -8,6 +8,7 @@ const saveFeeConfigurations = (req, res) => {
   const feeString = req.body?.FeeConfigurationSpec;
   try {
     const feeConfiguration = feeString.split("\n");
+
     feeConfiguration.forEach(async (feeConfiguration) => {
       let id = feeConfiguration.match(/^[A-Z0-9]{8}/)?.at(0);
       let currency = feeConfiguration.match(/((?<=\d )\*)|( [A-Z]{3} )/)?.at(0);
@@ -82,6 +83,7 @@ const feeComputation = async (req, res) => {
           let percentage = response.value;
           let AppliedFeeValuePerc = Number((percentage * Number(Amount)) / 100);
           let ChargeAmountPerc = Number(Amount) + Number(AppliedFeeValuePerc);
+          
           data = {
             AppliedFeeID: response.id,
             AppliedFeeValue: AppliedFeeValuePerc,
