@@ -1,4 +1,11 @@
 const Fee = require("../models/fees.model");
+const Redis = require("redis");
+require("dotenv").config();
+
+const redisClient = Redis.createClient({
+  host: `${process.env.REDIS_HOST}`,
+  port: `${process.env.REDIS_PORT}`,
+});
 
 const saveFeeConfigurations = (req, res) => {
   const feeString = req.body?.FeeConfigurationSpec;
@@ -6,12 +13,11 @@ const saveFeeConfigurations = (req, res) => {
     const feeConfiguration = feeString.split("\n");
     feeConfiguration.forEach(async (feeConfiguration) => {
       let id = feeConfiguration.match(/^[A-Z0-9]{8}/)?.at(0);
-      // let currency = feeConfiguration.match(/( [A-Z]{3} )/)?.at(0);
       let currency = feeConfiguration.match(/((?<=\d )\*)|( [A-Z]{3} )/)?.at(0);
       let locale = feeConfiguration
         .match(/ (LOCL|INTL|(\*)) /)
         ?.at(0)
-        .split(" ")[1];
+        ?.split(" ")[1];
       let entity = feeConfiguration.match(/(([-]?[A-Z])+|\*)(?=\()/)?.at(0);
       let entityProperty = feeConfiguration.match(/\((.*?)\)/)?.at(1);
       let type = feeConfiguration.match(/(FLAT[\_]?|PERC)+/)?.at(0);
@@ -28,14 +34,6 @@ const saveFeeConfigurations = (req, res) => {
       status: "failed",
     });
   }
-
-  //   return feeEntities.map((feeEntity) => {
-  //     const feeConfiguration = feeConfigurationsMap[feeEntity];
-  //     return {
-  //       feeEntity,
-  //       feeConfiguration,
-  //     };
-  //   });
 };
 
 const feeComputation = async (req, res) => {
@@ -49,24 +47,37 @@ const feeComputation = async (req, res) => {
         : "*";
     const entity = PaymentEntity.Type ? PaymentEntity.Type : "*";
     try {
-      let response = await Fee.findOne(
-        {
-          locale,
-          entity,
-          $or: [
-            { entityProperty: PaymentEntity.ID },
-            { entityProperty: PaymentEntity.Brand },
-            { entityProperty: PaymentEntity.Number },
-            { entityProperty: PaymentEntity.Issuer },
-            { entityProperty: PaymentEntity.SixID },
-            { entityProperty: "*" },
-          ],
-        },
+      let cachedResponse = await redisClient.get(
+        `fee?locale=${locale}?entity=${entity}?entityProperty=${PaymentEntity.Issuer}`
+      );
+      let response;
+      if (cachedResponse != null) {
+        response = JSON.parse(cachedResponse);
+      } else {
+        response = await Fee.findOne(
+          {
+            locale,
+            entity,
+            $or: [
+              { entityProperty: PaymentEntity.ID },
+              { entityProperty: PaymentEntity.Brand },
+              { entityProperty: PaymentEntity.Number },
+              { entityProperty: PaymentEntity.Issuer },
+              { entityProperty: PaymentEntity.SixID },
+              { entityProperty: "*" },
+            ],
+          },
 
-        { id: 1, value: 1, type: 1 }
-      )
-        .lean()
-        .sort({ entityProperty: -1 });
+          { id: 1, value: 1, type: 1 }
+        )
+          .lean()
+          .sort({ entityProperty: -1 });
+      }
+
+      await redisClient.set(
+        `fee?locale=${locale}?entity=${entity}?entityProperty=${PaymentEntity.Issuer}`,
+        JSON.stringify(response)
+      );
 
       let data;
       switch (response.type) {
@@ -110,18 +121,17 @@ const feeComputation = async (req, res) => {
 
           return res.status(200).json(data);
       }
-      return res.status(200).json(response);
     } catch (err) {
-      console.log(err);
+      console.log(err.message);
+      return res.status(200).json({ status: "failed" });
     }
   } else {
     return res.status(200).json({
-      AppliedFeeID: "",
-      AppliedFeeValue: "",
+      AppliedFeeValue: 0,
       ChargeAmount: Amount,
       SettlementAmount: Amount,
     });
   }
 };
 
-module.exports = { saveFeeConfigurations, feeComputation };
+module.exports = { saveFeeConfigurations, feeComputation, redisClient };

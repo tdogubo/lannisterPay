@@ -1,6 +1,5 @@
 const express = require("express");
 const { FeesRouter } = require("./routes/fees.routes");
-require("dotenv").config();
 
 const app = express();
 
