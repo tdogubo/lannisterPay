@@ -2,10 +2,7 @@ const Fee = require("../models/fees.model");
 const Redis = require("redis");
 require("dotenv").config();
 
-const redisClient = Redis.createClient({
-  host: `${process.env.REDIS_HOST}`,
-  port: `${process.env.REDIS_PORT}`,
-});
+const redisClient = Redis.createClient(`${process.env.REDIS_URL}`);
 
 const saveFeeConfigurations = (req, res) => {
   const feeString = req.body?.FeeConfigurationSpec;
