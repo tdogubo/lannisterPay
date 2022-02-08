@@ -2,13 +2,7 @@ const Fee = require("../models/fees.model");
 const Redis = require("redis");
 require("dotenv").config();
 
-const redisClient = Redis.createClient({
-  url: process.env.REDIS_TLS_URL,
-  socket: {
-    tls: true,
-    rejectUnauthorized: false,
-  },
-});
+const redisClient = Redis.createClient({url:process.env.REDIS_URL});
 
 const saveFeeConfigurations = (req, res) => {
   const feeString = req.body?.FeeConfigurationSpec;
@@ -89,7 +83,7 @@ const feeComputation = async (req, res) => {
           let percentage = response.value;
           let AppliedFeeValuePerc = Number((percentage * Number(Amount)) / 100);
           let ChargeAmountPerc = Number(Amount) + Number(AppliedFeeValuePerc);
-
+          
           data = {
             AppliedFeeID: response.id,
             AppliedFeeValue: AppliedFeeValuePerc,
